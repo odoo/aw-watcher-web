@@ -109,3 +109,11 @@ export const getApiKey = (): Promise<ApiKey | undefined> =>
     .then((data: StorageData) => data.apiKey as string | undefined)
 export const setApiKey = (apiKey: ApiKey) =>
   browser.storage.local.set({ apiKey })
+
+type GmailEnabled = boolean
+export const getGmailEnabled = (): Promise<GmailEnabled> =>
+  browser.storage.local.get('gmailEnabled').then((_) =>
+    _.gmailEnabled === undefined ? true : Boolean(_.gmailEnabled)
+  )
+export const setGmailEnabled = (gmailEnabled: GmailEnabled) =>
+  browser.storage.local.set({ gmailEnabled })
