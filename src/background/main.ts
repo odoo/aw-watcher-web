@@ -4,6 +4,7 @@ import {
   heartbeatAlarmListener,
   sendInitialHeartbeat,
   tabActivatedListener,
+  setupMessageListener,
 } from './heartbeat'
 import { getClient, detectHostname, loadApiKey } from './client'
 import {
@@ -12,6 +13,7 @@ import {
   setBaseUrl,
   setConsentStatus,
   setEnabled,
+  setGmailEnabled,
   setHostname,
   waitForEnabled,
 } from '../storage'
@@ -49,6 +51,7 @@ browser.runtime.onInstalled.addListener(async () => {
     else if (consent) console.info('Consent required but already accepted')
     console.debug('Enabling the extension')
     await setEnabled(true)
+    await setGmailEnabled(true)
   } else {
     console.info('Consent is required...opening consent tab')
     await setConsentStatus({ consent, required: true })
@@ -66,6 +69,9 @@ console.debug('Creating alarms and tab listeners')
 browser.alarms.create(config.heartbeat.alarmName, {
   periodInMinutes: Math.floor(config.heartbeat.intervalInSeconds / 60),
 })
+// Set up Gmail message listener (other watchers will be added later)
+setupMessageListener(client)
+
 browser.alarms.onAlarm.addListener(async (alarm) => {
   await clientReady
   return heartbeatAlarmListener(client)(alarm)
