@@ -101,3 +101,15 @@ export const getHostname = (): Promise<Hostname | undefined> =>
     .then((data: StorageData) => data.hostname as string | undefined)
 export const setHostname = (hostname: Hostname) =>
   browser.storage.local.set({ hostname })
+
+type GmailEnabled = boolean
+export const getGmailEnabled = (): Promise<GmailEnabled> =>
+  browser.storage.local.get('gmailEnabled').then((_) => Boolean(_.gmailEnabled))
+export const setGmailEnabled = (gmailEnabled: GmailEnabled) =>
+  browser.storage.local.set({ gmailEnabled })
+
+type MeetEnabled = boolean
+export const getMeetEnabled = (): Promise<MeetEnabled> =>
+  browser.storage.local.get('meetEnabled').then((_) => Boolean(_.meetEnabled))
+export const setMeetEnabled = (meetEnabled: MeetEnabled) =>
+  browser.storage.local.set({ meetEnabled })
