@@ -107,3 +107,9 @@ export const getGmailEnabled = (): Promise<GmailEnabled> =>
   browser.storage.local.get('gmailEnabled').then((_) => Boolean(_.gmailEnabled))
 export const setGmailEnabled = (gmailEnabled: GmailEnabled) =>
   browser.storage.local.set({ gmailEnabled })
+
+type MeetEnabled = boolean
+export const getMeetEnabled = (): Promise<MeetEnabled> =>
+  browser.storage.local.get('meetEnabled').then((_) => Boolean(_.meetEnabled))
+export const setMeetEnabled = (meetEnabled: MeetEnabled) =>
+  browser.storage.local.set({ meetEnabled })

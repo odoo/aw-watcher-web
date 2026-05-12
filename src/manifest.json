@@ -74,6 +74,14 @@
             "js": [
                 "src/content/gmail.ts"
             ]
+        },
+        {
+            "matches": [
+                "*://meet.google.com/*"
+            ],
+            "js": [
+                "src/content/meet.ts"
+            ]
         }
     ]
 }

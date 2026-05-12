@@ -3,20 +3,40 @@ import { getActiveWindowTab, getTab, getTabs } from './helpers'
 import config from '../config'
 import { AWClient, IEvent } from 'aw-client'
 import { getBucketId, sendHeartbeat } from './client'
-import { getEnabled, getHeartbeatData, setHeartbeatData, getGmailEnabled } from '../storage'
+import { getEnabled, getHeartbeatData, setHeartbeatData, getGmailEnabled, getMeetEnabled } from '../storage'
 import deepEqual from 'deep-equal'
 
 export function setupMessageListener(client: AWClient) {
   browser.runtime.onMessage.addListener(
     async (message: any, sender: browser.Runtime.MessageSender) => {
       const enabled = await getEnabled();
-      const gmailEnabled = await getGmailEnabled();
-      if (!enabled || !gmailEnabled) return;
+      if (!enabled) return;
 
       if (message.type === 'AW_GMAIL_HEARTBEAT') {
+        const gmailEnabled = await getGmailEnabled();
+        if (!gmailEnabled) return;
+
         const tab = sender.tab;
         if (!tab || !tab.url || !tab.title) return;
         if (!tab.url.includes('mail.google.com')) return;
+        const tabs = await getTabs();
+
+        const data: IEvent['data'] = {
+          url: tab.url,
+          title: tab.title,
+          audible: tab.audible ?? false,
+          incognito: tab.incognito,
+          tabCount: tabs.length,
+          ...message.data,
+        };
+        await performHeartbeat(client, data);
+      } else if (message.type === 'AW_MEET_HEARTBEAT') {
+        const meetEnabled = await getMeetEnabled();
+        if (!meetEnabled) return;
+
+        const tab = sender.tab;
+        if (!tab || !tab.url || !tab.title) return;
+        if (!tab.url.includes('meet.google.com')) return;
         const tabs = await getTabs();
 
         const data: IEvent['data'] = {
@@ -106,6 +126,12 @@ async function heartbeat(
   if (gmailEnabled && tab.url.includes('mail.google.com')) {
     // Sharp cut: finalize the previous activity (e.g. if we came from Google Search)
     // but don't start the 'Generic' Gmail event. Gmail.ts will do that with metadata.
+    await performHeartbeat(client, data, { finalizeOnly: true });
+    return;
+  }
+
+  const meetEnabled = await getMeetEnabled();
+  if (meetEnabled && tab.url.includes('meet.google.com')) {
     await performHeartbeat(client, data, { finalizeOnly: true });
     return;
   }

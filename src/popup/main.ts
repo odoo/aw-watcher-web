@@ -12,6 +12,8 @@ import {
   getHostname,
   getGmailEnabled,
   setGmailEnabled,
+  getMeetEnabled,
+  setMeetEnabled,
 } from '../storage'
 
 function setConnected(connected: boolean | undefined) {
@@ -34,6 +36,7 @@ async function renderStatus() {
   const baseUrl = await getBaseUrl()
   const enabled = await getEnabled()
   const gmailEnabled = await getGmailEnabled()
+  const meetEnabled = await getMeetEnabled()
   const syncStatus = await getSyncStatus()
   const consentStatus = await getConsentStatus()
   const browserName = await getBrowserName()
@@ -51,6 +54,12 @@ async function renderStatus() {
     throw Error('Gmail enable checkbox is not an input')
   gmailEnabledCheckbox.checked = gmailEnabled
 
+  // Meet checkbox
+  const meetEnabledCheckbox = document.getElementById('status-meet-enabled-checkbox')
+  if (!(meetEnabledCheckbox instanceof HTMLInputElement))
+    throw Error('Meet enable checkbox is not an input')
+  meetEnabledCheckbox.checked = meetEnabled
+
   // Consent Button
   const showConsentBtn = document.getElementById('status-consent-btn')
   if (!(showConsentBtn instanceof HTMLButtonElement))
@@ -59,10 +68,12 @@ async function renderStatus() {
   if (!consentStatus.required || consentStatus.consent) {
     enabledCheckbox.removeAttribute('disabled')
     gmailEnabledCheckbox.removeAttribute('disabled')
+    meetEnabledCheckbox.removeAttribute('disabled')
     showConsentBtn.style.setProperty('display', 'none')
   } else {
     enabledCheckbox.setAttribute('disabled', '')
     gmailEnabledCheckbox.setAttribute('disabled', '')
+    meetEnabledCheckbox.setAttribute('disabled', '')
     showConsentBtn.style.setProperty('display', 'inline-block')
   }
 
@@ -116,6 +127,14 @@ function domListeners() {
   gmailEnabledCheckbox.addEventListener('change', async () => {
     const gmailEnabled = gmailEnabledCheckbox.checked
     setGmailEnabled(gmailEnabled)
+  })
+
+  const meetEnabledCheckbox = document.getElementById('status-meet-enabled-checkbox')
+  if (!(meetEnabledCheckbox instanceof HTMLInputElement))
+    throw Error('Meet enable checkbox is not an input')
+  meetEnabledCheckbox.addEventListener('change', async () => {
+    const meetEnabled = meetEnabledCheckbox.checked
+    setMeetEnabled(meetEnabled)
   })
 
   const consentButton = document.getElementById('status-consent-btn')!
