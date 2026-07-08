@@ -109,3 +109,11 @@ export const getGmailEnabled = (): Promise<GmailEnabled> =>
   )
 export const setGmailEnabled = (gmailEnabled: GmailEnabled) =>
   browser.storage.local.set({ gmailEnabled })
+
+type OutlookEnabled = boolean
+export const getOutlookEnabled = (): Promise<OutlookEnabled> =>
+  browser.storage.local.get('outlookEnabled').then((_) => 
+    _.outlookEnabled === undefined ? true : Boolean(_.outlookEnabled)
+  )
+export const setOutlookEnabled = (outlookEnabled: OutlookEnabled) =>
+  browser.storage.local.set({ outlookEnabled })
