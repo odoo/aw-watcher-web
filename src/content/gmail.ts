@@ -93,11 +93,13 @@ async function sendGmailHeartbeat() {
   if (form) {
     meta = dialogForm ? getComposeMetadata(form) : getReplyMetadata(form);
   } else {
-    const fromEl = document.querySelector('span.gD');
+    const fromEls = document.querySelectorAll('span.gD');
+    const fromElsLength = fromEls.length;
 
-    if (fromEl) {
-      const fromEmail = fromEl?.getAttribute('data-hovercard-id');
-      const fromName = getTextWithEmojis(fromEl as HTMLElement);
+    if (fromElsLength > 0) {
+      const lastReply = fromEls[fromElsLength - 1];
+      const fromEmail = lastReply?.getAttribute('data-hovercard-id');
+      const fromName = getTextWithEmojis(lastReply as HTMLElement);
       const from = `${fromName} (${fromEmail})`;
     
       const to = Array.from(
