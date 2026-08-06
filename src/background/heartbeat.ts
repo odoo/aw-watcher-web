@@ -1,5 +1,5 @@
 import browser from 'webextension-polyfill'
-import { getActiveWindowTab, getTab, getTabs } from './helpers'
+import { getActiveWindowTab, getTab, getTabs, isBrowserFocused } from './helpers'
 import config from '../config'
 import { AWClient, IEvent } from 'aw-client'
 import { getBucketId, sendHeartbeat } from './client'
@@ -49,6 +49,7 @@ function formatHeartbeatLogData(data: IEvent['data']) {
 export function setupMessageListener(client: AWClient) {
   browser.runtime.onMessage.addListener(
     async (message: any, sender: browser.Runtime.MessageSender) => {
+      if (!(await isBrowserFocused())) return;
       const enabled = await getEnabled();
       const gmailEnabled = await getGmailEnabled();
       if (!enabled || !gmailEnabled) return;
@@ -82,9 +83,6 @@ async function performHeartbeat(
   const now = new Date()
   const previousData = await getHeartbeatData()
   if (previousData && !deepEqual(previousData, data)) {
-    console.debug(
-      `Sending heartbeat for previous data: ${formatHeartbeatLogData(previousData)}`,
-    )
     await sendHeartbeat(
       client,
       await getBucketId(),
@@ -108,8 +106,79 @@ async function performHeartbeat(
     now,
     data,
     config.heartbeat.intervalInSeconds + 20,
-  )
+  ).catch((err: unknown) => {
+    console.error('[Background] Failed to send heartbeat:', err);
+  })
+
   await setHeartbeatData(data)
+}
+
+async function finalizeStoredHeartbeat(client: AWClient) {
+  const previousData = await getHeartbeatData()
+  if (!previousData) return
+
+  const bucketId = await getBucketId()
+  const now = new Date()
+
+  // Send a heartbeat with the previous data, to finalize the event with the exact duration
+  await sendHeartbeat(
+    client,
+    bucketId,
+    new Date(now.getTime() - 1),
+    previousData,
+    config.heartbeat.intervalInSeconds + 20,
+  ).catch(() => {})
+
+  // Send a closing heartbeat with a different data,
+  // same last event data but with browserFocused set to false to stop the previous event
+  // this event will be skipped as the duration will be 0, but it will finalize the previous event
+  const closingData = { ...previousData, browserFocused: false }
+
+  await sendHeartbeat(
+    client,
+    bucketId,
+    now,
+    closingData,
+    config.heartbeat.intervalInSeconds + 20,
+  ).catch(() => {})
+
+  await browser.storage.local.remove('heartbeatData')
+}
+
+async function heartbeatForActiveTab(client: AWClient) {
+  const activeWindowTab = await getActiveWindowTab()
+  if (!activeWindowTab) return
+  const tabs = await getTabs()
+  console.debug('Sending heartbeat for alarm', activeWindowTab.url)
+  await heartbeat(client, activeWindowTab, tabs.length)
+}
+
+let lastHandledFocusState: boolean | null = null
+
+async function handleFocusChange(client: AWClient) {
+  const focused = await isBrowserFocused()
+  if (focused === lastHandledFocusState) {
+    return
+  }
+  lastHandledFocusState = focused
+
+  if (!focused) {
+    await finalizeStoredHeartbeat(client)
+    return
+  }
+  await heartbeatForActiveTab(client)
+}
+
+export function setupFocusMessageListener(client: AWClient) {
+  browser.runtime.onMessage.addListener(
+    async (message: any, sender: browser.Runtime.MessageSender) => {
+      if (message?.type !== 'AW_FOCUS_CHANGED') return
+      if (!sender.tab?.active) {
+        return
+      }
+      await handleFocusChange(client)
+    },
+  )
 }
 
 async function heartbeat(
@@ -117,6 +186,11 @@ async function heartbeat(
   tab: browser.Tabs.Tab | undefined,
   tabCount: number,
 ) {
+  if (!(await isBrowserFocused())) {
+    await finalizeStoredHeartbeat(client)
+    return
+  }
+
   const enabled = await getEnabled()
   if (!enabled) {
     console.warn('Ignoring heartbeat because client has not been enabled')
@@ -167,11 +241,7 @@ export const sendInitialHeartbeat = async (client: AWClient) => {
 export const heartbeatAlarmListener =
   (client: AWClient) => async (alarm: browser.Alarms.Alarm) => {
     if (alarm.name !== config.heartbeat.alarmName) return
-    const activeWindowTab = await getActiveWindowTab()
-    if (!activeWindowTab) return
-    const tabs = await getTabs()
-    console.debug('Sending heartbeat for alarm', activeWindowTab.url)
-    await heartbeat(client, activeWindowTab, tabs.length)
+    await heartbeatForActiveTab(client)
   }
 
 export const tabActivatedListener =

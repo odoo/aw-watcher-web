@@ -5,7 +5,7 @@
 
     "name": "Timesheets Assistant",
     "description": "Log the current tab and your browser activity with ActivityWatch to use them to easily log your timesheets in Odoo.",
-    "version": "0.5.4",
+    "version": "0.5.4.1",
     "icons": {
         "128": "logo-128.png"
     },
@@ -77,6 +77,16 @@
             "js": [
                 "src/content/gmail.ts"
             ]
+        },
+        {
+            "matches": [
+                "<all_urls>"
+            ],
+            "js": [
+                "src/content/focus.ts"
+            ],
+            "run_at": "document_start",
+            "all_frames": false
         }
     ]
 }
