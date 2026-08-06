@@ -4,6 +4,7 @@ import {
   heartbeatAlarmListener,
   sendInitialHeartbeat,
   tabActivatedListener,
+  setupFocusMessageListener,
   setupMessageListener,
 } from './heartbeat'
 import { getClient, detectHostname } from './client'
@@ -71,6 +72,7 @@ browser.alarms.create(config.heartbeat.alarmName, {
 
 // Set up Gmail message listener (other watchers will be added later)
 setupMessageListener(client)
+setupFocusMessageListener(client)
 
 browser.alarms.onAlarm.addListener(heartbeatAlarmListener(client))
 browser.tabs.onActivated.addListener(tabActivatedListener(client))

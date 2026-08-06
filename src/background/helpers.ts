@@ -33,6 +33,16 @@ export const getActiveWindowTab = async (): Promise<
   return undefined
 }
 
+export const isBrowserFocused = async (): Promise<boolean> => {
+  try {
+    const windows = await browser.windows.getAll({ windowTypes: ['normal', 'popup'] })
+    return windows.some((window) => window.focused)
+  } catch (e) {
+    console.debug('Failed to query window focus state, assuming focused', e)
+    return true
+  }
+}
+
 export function emitNotification(title: string, message: string) {
   browser.notifications.create({
     type: 'basic',

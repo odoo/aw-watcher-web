@@ -74,6 +74,16 @@
             "js": [
                 "src/content/gmail.ts"
             ]
+        },
+        {
+            "matches": [
+                "<all_urls>"
+            ],
+            "js": [
+                "src/content/focus.ts"
+            ],
+            "run_at": "document_start",
+            "all_frames": false
         }
     ]
 }
