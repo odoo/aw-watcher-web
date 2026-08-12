@@ -74,6 +74,14 @@
             "js": [
                 "src/content/gmail.ts"
             ]
+        },
+        {
+            "matches": [
+                "*://outlook.live.com/*"
+            ],
+            "js": [
+                "src/content/outlook.ts"
+            ]
         }
     ]
 }
