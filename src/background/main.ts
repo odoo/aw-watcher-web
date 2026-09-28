@@ -15,6 +15,7 @@ import {
   setConsentStatus,
   setEnabled,
   setGmailEnabled,
+  setOutlookEnabled,
   setHostname,
   waitForEnabled,
 } from '../storage'
@@ -53,6 +54,7 @@ browser.runtime.onInstalled.addListener(async () => {
     console.debug('Enabling the extension')
     await setEnabled(true)
     await setGmailEnabled(true)
+    await setOutlookEnabled(true)
   } else {
     console.info('Consent is required...opening consent tab')
     await setConsentStatus({ consent, required: true })
