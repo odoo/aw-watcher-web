@@ -3,7 +3,7 @@ import { getActiveWindowTab, getTab, getTabs, isBrowserFocused } from './helpers
 import config from '../config'
 import { AWClient, IEvent } from 'aw-client'
 import { getBucketId, sendHeartbeat } from './client'
-import { getEnabled, getHeartbeatData, setHeartbeatData, getGmailEnabled } from '../storage'
+import { getEnabled, getHeartbeatData, setHeartbeatData, getGmailEnabled, getOutlookEnabled } from '../storage'
 import deepEqual from 'deep-equal'
 import * as punycode from 'punycode.js'
 
@@ -51,13 +51,16 @@ export function setupMessageListener(client: AWClient) {
     async (message: any, sender: browser.Runtime.MessageSender) => {
       if (!(await isBrowserFocused())) return;
       const enabled = await getEnabled();
-      const gmailEnabled = await getGmailEnabled();
-      if (!enabled || !gmailEnabled) return;
+      if (!enabled) return;
 
-      if (message.type === 'AW_GMAIL_HEARTBEAT') {
+      if (['AW_GMAIL_HEARTBEAT', 'AW_OUTLOOK_HEARTBEAT'].includes(message.type)) {
+        const providerEnabledFn = message.type === 'AW_GMAIL_HEARTBEAT' ? getGmailEnabled : getOutlookEnabled;
+        const providerEnabled = await providerEnabledFn();
+        if (!providerEnabled) return;
+
+        const urlToExclude = message.type === 'AW_GMAIL_HEARTBEAT' ? 'mail.google.com' : 'outlook.live.com';
         const tab = sender.tab;
-        if (!tab || !tab.url || !tab.title) return;
-        if (!tab.url.includes('mail.google.com')) return;
+        if (!tab || !tab.url || !tab.title || !tab.url.includes(urlToExclude)) return;
         const tabs = await getTabs();
 
         const data: IEvent['data'] = {
@@ -222,7 +225,11 @@ async function heartbeat(
 
   const options: { finalizeOnly?: boolean } = {};
   const gmailEnabled = await getGmailEnabled();
-  if (gmailEnabled && url.includes('mail.google.com')) {
+  const outlookEnabled = await getOutlookEnabled();
+  if (
+    (gmailEnabled && url.includes('mail.google.com')) ||
+    (outlookEnabled && url.includes('outlook.live.com'))
+  ) {
     // Sharp cut: finalize the previous activity (e.g. if we came from Google Search)
     // but don't start the 'Generic' Gmail event. Gmail.ts will do that with metadata.
     options.finalizeOnly = true;
