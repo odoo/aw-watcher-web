@@ -87,6 +87,14 @@
             ],
             "run_at": "document_start",
             "all_frames": false
+        },
+        {
+            "matches": [
+                "*://outlook.live.com/*"
+            ],
+            "js": [
+                "src/content/outlook.ts"
+            ]
         }
     ]
 }

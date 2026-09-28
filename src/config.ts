@@ -5,8 +5,8 @@ const config = {
     alarmName: 'heartbeat',
     intervalInSeconds: 60,
     // Composing (subject, recipients) or opening an inline reply doesn't change the URL,
-    // so we check the Gmail data regularly to catch it
-    gmailCheckIntervalInSeconds: 5,
+    // so we check the webmail data regularly to catch it
+    mailCheckIntervalInSeconds: 5,
   },
 }
 

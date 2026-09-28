@@ -9,7 +9,13 @@ import {
 import config from '../config'
 import { AWClient, IEvent } from 'aw-client'
 import { getBucketId, sendHeartbeat } from './client'
-import { getEnabled, getHeartbeatData, setHeartbeatData, getGmailEnabled } from '../storage'
+import {
+  getEnabled,
+  getHeartbeatData,
+  setHeartbeatData,
+  getGmailEnabled,
+  getOutlookEnabled,
+} from '../storage'
 import deepEqual from 'deep-equal'
 import * as punycode from 'punycode.js'
 
@@ -142,14 +148,26 @@ export function setupFocusMessageListener(client: AWClient) {
   )
 }
 
-async function requestGmailData(
+// The content script of each webmail only reads the page and gives its data when asked
+const MAIL_PROVIDERS = [
+  { url: 'mail.google.com', messageType: 'AW_GMAIL_GET_DATA', isEnabled: getGmailEnabled },
+  { url: 'outlook.live.com', messageType: 'AW_OUTLOOK_GET_DATA', isEnabled: getOutlookEnabled },
+]
+
+async function getMailProvider(url: string | undefined) {
+  const provider = MAIL_PROVIDERS.find((provider) => url?.includes(provider.url))
+  return provider && (await provider.isEnabled()) ? provider : undefined
+}
+
+async function requestMailData(
   tab: browser.Tabs.Tab,
+  messageType: string,
 ): Promise<IEvent['data'] | undefined> {
   if (tab.id === undefined) return undefined
   try {
-    return await browser.tabs.sendMessage(tab.id, { type: 'AW_GMAIL_GET_DATA' })
+    return await browser.tabs.sendMessage(tab.id, { type: messageType })
   } catch (e) {
-    console.debug('Failed to get the data from the Gmail tab', e)
+    console.debug('Failed to get the data from the mail tab', e)
     return undefined
   }
 }
@@ -194,11 +212,11 @@ async function heartbeat(
     tabCount: tabCount,
   }
 
-  const gmailEnabled = await getGmailEnabled();
-  if (gmailEnabled && url.includes('mail.google.com')) {
-    // gmail.ts only reads the page, it's up to us to ask for its data. Without an answer
-    // (page loading, content script from a previous version), we keep the tab data
-    Object.assign(data, await requestGmailData(tab))
+  const mailProvider = await getMailProvider(url)
+  if (mailProvider) {
+    // Without an answer (page loading, content script from a previous version), we keep
+    // the tab data
+    Object.assign(data, await requestMailData(tab, mailProvider.messageType))
   }
 
   if (options.onlyIfChanged && deepEqual(await getHeartbeatData(), data)) return
@@ -219,18 +237,17 @@ export const heartbeatAlarmListener =
     await heartbeatForActiveTab(client)
   }
 
-// Changes inside Gmail that keep the same URL (subject, recipients, inline reply) don't
-// trigger any browser event, so we ask the Gmail tab for its data regularly while it's
+// Changes inside a webmail that keep the same URL (subject, recipients, inline reply) don't
+// trigger any browser event, so we ask the mail tab for its data regularly while it's
 // the one the user is on, and only send a heartbeat when the data changed
-export function setupGmailCheck(client: AWClient) {
+export function setupMailCheck(client: AWClient) {
   setInterval(async () => {
-    if (!(await getGmailEnabled())) return
     const tab = await getActiveWindowTab()
-    if (!tab?.url?.includes('mail.google.com')) return
+    if (!tab || !(await getMailProvider(tab.url))) return
     if (!(await isTabFocused(tab))) return
     const tabs = await getTabs()
     await heartbeat(client, tab, tabs.length, { onlyIfChanged: true })
-  }, config.heartbeat.gmailCheckIntervalInSeconds * 1000)
+  }, config.heartbeat.mailCheckIntervalInSeconds * 1000)
 }
 
 export const tabUpdatedListener =
