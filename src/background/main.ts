@@ -4,8 +4,9 @@ import {
   heartbeatAlarmListener,
   sendInitialHeartbeat,
   tabActivatedListener,
+  tabUpdatedListener,
   setupFocusMessageListener,
-  setupMessageListener,
+  setupGmailCheck,
 } from './heartbeat'
 import { getClient, detectHostname, loadApiKey } from './client'
 import {
@@ -70,9 +71,8 @@ console.debug('Creating alarms and tab listeners')
 browser.alarms.create(config.heartbeat.alarmName, {
   periodInMinutes: Math.floor(config.heartbeat.intervalInSeconds / 60),
 })
-// Set up Gmail message listener (other watchers will be added later)
-setupMessageListener(client)
 setupFocusMessageListener(client)
+clientReady.then(() => setupGmailCheck(client))
 
 browser.alarms.onAlarm.addListener(async (alarm) => {
   await clientReady
@@ -81,6 +81,10 @@ browser.alarms.onAlarm.addListener(async (alarm) => {
 browser.tabs.onActivated.addListener(async (activeInfo) => {
   await clientReady
   return tabActivatedListener(client)(activeInfo)
+})
+browser.tabs.onUpdated.addListener(async (tabId, changeInfo, tab) => {
+  await clientReady
+  return tabUpdatedListener(client)(tabId, changeInfo, tab)
 })
 
 console.debug('Setting base url')

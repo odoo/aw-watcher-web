@@ -1,12 +1,4 @@
 import browser from 'webextension-polyfill'
-import deepEqual from 'deep-equal'
-import config from '../config'
-
-let lastData: any | null = null;
-
-function isExtensionValid() {
-  return typeof browser !== 'undefined' && !!browser.storage && !!browser.runtime?.id;
-}
 
 function getTextWithEmojis(el: HTMLElement | null): string {
   if (!el) return '';
@@ -71,17 +63,7 @@ function getReplyMetadata(form: HTMLElement) {
   };
 }
 
-async function sendGmailHeartbeat() {
-  if (!isExtensionValid()) {
-    // Don't kill tracking — just skip this tick.
-    // The onChanged listener will handle re-evaluation.
-    return;
-  }
-  if (document.visibilityState === 'hidden') {
-    return;
-  }
-
-
+function getGmailMetadata() {
   // for simplity in MVP:
   // - if many emails forms are open, we only track the first one
   const dialogForm = document.querySelector('div[role="dialog"] form') as HTMLElement | null;
@@ -127,79 +109,11 @@ async function sendGmailHeartbeat() {
     }
   }
 
-    if (!deepEqual(lastData, meta)) {
-      lastData = meta;
-      browser.runtime.sendMessage({ 
-        type: 'AW_GMAIL_HEARTBEAT', 
-        data: meta
-      }).catch(() => {})
-    }
-  }
-
-let detectIntervalId: ReturnType<typeof setInterval> | null = null;
-let pulseIntervalId: ReturnType<typeof setInterval> | null = null;
-
-function startTracking() {
-  if (detectIntervalId !== null) {
-    return; 
-  }
-  
-  detectIntervalId = setInterval(sendGmailHeartbeat, 5000);
-  pulseIntervalId = setInterval(() => {
-    if (!isExtensionValid()) {
-      return;
-    }
-    if (lastData && document.visibilityState === 'visible') {
-      try {
-        browser.runtime.sendMessage({ 
-          type: 'AW_GMAIL_HEARTBEAT', 
-          data: lastData
-        }).catch(() => {})
-      } catch (err) {
-        // Extension context invalidated
-      }
-    }
-  }, config.heartbeat.intervalInSeconds * 1000);
-  
-  sendGmailHeartbeat();
+  return meta;
 }
 
-async function refreshTracking() {
-  if (!isExtensionValid()) {
-    return;
-  }
-  try {
-    const settings = await browser.storage.local.get(['gmailEnabled', 'enabled']);
-    const shouldTrack = Boolean(settings.gmailEnabled && settings.enabled);
-    
-    if (shouldTrack) {
-      startTracking();
-    } else {
-      stopTracking();
-    }
-  } catch (err) {
-    console.error('[Gmail Content] Failed to refresh tracking state', err);
-  }
-}
-
-function stopTracking() {
-  if (detectIntervalId !== null) {
-    clearInterval(detectIntervalId)
-    detectIntervalId = null;
-  }
-  if (pulseIntervalId !== null) {
-    clearInterval(pulseIntervalId)
-    pulseIntervalId = null;
-  }
-  lastData = null;
-}
-
-browser.storage.local.get(['gmailEnabled', 'enabled']).then(() => {
-  refreshTracking();
-})
-
-browser.storage.onChanged.addListener((changes) => {
-  if ('gmailEnabled' in changes || 'enabled' in changes) {
-    refreshTracking();
-  }
+// This script only reads the page: the background asks for the data when it needs it
+browser.runtime.onMessage.addListener((message: any) => {
+  if (message?.type !== 'AW_GMAIL_GET_DATA') return undefined;
+  return Promise.resolve(getGmailMetadata());
 })

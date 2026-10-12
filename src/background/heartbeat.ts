@@ -1,5 +1,11 @@
 import browser from 'webextension-polyfill'
-import { getActiveWindowTab, getTab, getTabs, isBrowserFocused } from './helpers'
+import {
+  getActiveWindowTab,
+  getTab,
+  getTabs,
+  isBrowserFocused,
+  isTabFocused,
+} from './helpers'
 import config from '../config'
 import { AWClient, IEvent } from 'aw-client'
 import { getBucketId, sendHeartbeat } from './client'
@@ -46,38 +52,9 @@ function formatHeartbeatLogData(data: IEvent['data']) {
     .join(', ')
 }
 
-export function setupMessageListener(client: AWClient) {
-  browser.runtime.onMessage.addListener(
-    async (message: any, sender: browser.Runtime.MessageSender) => {
-      if (!(await isBrowserFocused())) return;
-      const enabled = await getEnabled();
-      const gmailEnabled = await getGmailEnabled();
-      if (!enabled || !gmailEnabled) return;
-
-      if (message.type === 'AW_GMAIL_HEARTBEAT') {
-        const tab = sender.tab;
-        if (!tab || !tab.url || !tab.title) return;
-        if (!tab.url.includes('mail.google.com')) return;
-        const tabs = await getTabs();
-
-        const data: IEvent['data'] = {
-          url: tab.url,
-          title: tab.title,
-          audible: tab.audible ?? false,
-          incognito: tab.incognito,
-          tabCount: tabs.length,
-          ...message.data,
-        };
-        await performHeartbeat(client, data);
-      }
-    },
-  )
-}
-
 async function performHeartbeat(
   client: AWClient,
   data: IEvent['data'],
-  options: { finalizeOnly?: boolean } = {}
 ) {
   const bucketId = await getBucketId()
   const now = new Date()
@@ -90,13 +67,6 @@ async function performHeartbeat(
       previousData,
       config.heartbeat.intervalInSeconds + 20,
     )
-  }
-
-  if (options.finalizeOnly) {
-    if (previousData) {
-      await browser.storage.local.remove('heartbeatData');
-    }
-    return;
   }
 
   console.debug(`Sending heartbeat: ${formatHeartbeatLogData(data)}`)
@@ -153,22 +123,6 @@ async function heartbeatForActiveTab(client: AWClient) {
   await heartbeat(client, activeWindowTab, tabs.length)
 }
 
-let lastHandledFocusState: boolean | null = null
-
-async function handleFocusChange(client: AWClient) {
-  const focused = await isBrowserFocused()
-  if (focused === lastHandledFocusState) {
-    return
-  }
-  lastHandledFocusState = focused
-
-  if (!focused) {
-    await finalizeStoredHeartbeat(client)
-    return
-  }
-  await heartbeatForActiveTab(client)
-}
-
 export function setupFocusMessageListener(client: AWClient) {
   browser.runtime.onMessage.addListener(
     async (message: any, sender: browser.Runtime.MessageSender) => {
@@ -176,15 +130,35 @@ export function setupFocusMessageListener(client: AWClient) {
       if (!sender.tab?.active) {
         return
       }
-      await handleFocusChange(client)
+      // No state kept: the focus comes from the tab the user is now on, also when coming
+      // from another browser window. Sending the same data again is merged by AW
+      if (message.focused) {
+        const tabs = await getTabs()
+        await heartbeat(client, sender.tab, tabs.length)
+      } else if (!(await isBrowserFocused())) {
+        await finalizeStoredHeartbeat(client)
+      }
     },
   )
+}
+
+async function requestGmailData(
+  tab: browser.Tabs.Tab,
+): Promise<IEvent['data'] | undefined> {
+  if (tab.id === undefined) return undefined
+  try {
+    return await browser.tabs.sendMessage(tab.id, { type: 'AW_GMAIL_GET_DATA' })
+  } catch (e) {
+    console.debug('Failed to get the data from the Gmail tab', e)
+    return undefined
+  }
 }
 
 async function heartbeat(
   client: AWClient,
   tab: browser.Tabs.Tab | undefined,
   tabCount: number,
+  options: { onlyIfChanged?: boolean } = {},
 ) {
   if (!(await isBrowserFocused())) {
     await finalizeStoredHeartbeat(client)
@@ -220,15 +194,16 @@ async function heartbeat(
     tabCount: tabCount,
   }
 
-  const options: { finalizeOnly?: boolean } = {};
   const gmailEnabled = await getGmailEnabled();
   if (gmailEnabled && url.includes('mail.google.com')) {
-    // Sharp cut: finalize the previous activity (e.g. if we came from Google Search)
-    // but don't start the 'Generic' Gmail event. Gmail.ts will do that with metadata.
-    options.finalizeOnly = true;
+    // gmail.ts only reads the page, it's up to us to ask for its data. Without an answer
+    // (page loading, content script from a previous version), we keep the tab data
+    Object.assign(data, await requestGmailData(tab))
   }
 
-  await performHeartbeat(client, data, options);
+  if (options.onlyIfChanged && deepEqual(await getHeartbeatData(), data)) return
+
+  await performHeartbeat(client, data);
 }
 
 export const sendInitialHeartbeat = async (client: AWClient) => {
@@ -242,6 +217,35 @@ export const heartbeatAlarmListener =
   (client: AWClient) => async (alarm: browser.Alarms.Alarm) => {
     if (alarm.name !== config.heartbeat.alarmName) return
     await heartbeatForActiveTab(client)
+  }
+
+// Changes inside Gmail that keep the same URL (subject, recipients, inline reply) don't
+// trigger any browser event, so we ask the Gmail tab for its data regularly while it's
+// the one the user is on, and only send a heartbeat when the data changed
+export function setupGmailCheck(client: AWClient) {
+  setInterval(async () => {
+    if (!(await getGmailEnabled())) return
+    const tab = await getActiveWindowTab()
+    if (!tab?.url?.includes('mail.google.com')) return
+    if (!(await isTabFocused(tab))) return
+    const tabs = await getTabs()
+    await heartbeat(client, tab, tabs.length, { onlyIfChanged: true })
+  }, config.heartbeat.gmailCheckIntervalInSeconds * 1000)
+}
+
+export const tabUpdatedListener =
+  (client: AWClient) =>
+  async (
+    _tabId: number,
+    changeInfo: browser.Tabs.OnUpdatedChangeInfoType,
+    tab: browser.Tabs.Tab,
+  ) => {
+    // Only the URL: the title also changes on its own, e.g. Gmail's unread count
+    if (!changeInfo.url || !tab.active) return
+    if (!(await isTabFocused(tab))) return
+    const tabs = await getTabs()
+    console.debug('Sending heartbeat for URL change', changeInfo.url)
+    await heartbeat(client, tab, tabs.length)
   }
 
 export const tabActivatedListener =
