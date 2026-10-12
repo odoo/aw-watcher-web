@@ -33,6 +33,19 @@ export const getActiveWindowTab = async (): Promise<
   return undefined
 }
 
+// The tab the user is looking at: the active tab of the focused window. A tab can be
+// visible (`document.visibilityState`) without that, e.g. in another window.
+export const isTabFocused = async (tab: browser.Tabs.Tab): Promise<boolean> => {
+  if (!tab.active || tab.windowId === undefined) return false
+  try {
+    const window = await browser.windows.get(tab.windowId)
+    return window.focused
+  } catch (e) {
+    console.debug('Failed to query the window of the tab', e)
+    return false
+  }
+}
+
 export const isBrowserFocused = async (): Promise<boolean> => {
   try {
     const windows = await browser.windows.getAll({ windowTypes: ['normal', 'popup'] })
