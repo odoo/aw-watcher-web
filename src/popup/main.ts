@@ -12,6 +12,8 @@ import {
   getHostname,
   getGmailEnabled,
   setGmailEnabled,
+  getOutlookEnabled,
+  setOutlookEnabled,
 } from '../storage'
 
 function setConnected(connected: boolean | undefined) {
@@ -34,6 +36,7 @@ async function renderStatus() {
   const baseUrl = await getBaseUrl()
   const enabled = await getEnabled()
   const gmailEnabled = await getGmailEnabled()
+  const outlookEnabled = await getOutlookEnabled()
   const syncStatus = await getSyncStatus()
   const consentStatus = await getConsentStatus()
   const browserName = await getBrowserName()
@@ -51,6 +54,12 @@ async function renderStatus() {
     throw Error('Gmail enable checkbox is not an input')
   gmailEnabledCheckbox.checked = gmailEnabled
 
+  // Outlook checkbox
+  const outlookEnabledCheckbox = document.getElementById('status-outlook-enabled-checkbox')
+  if (!(outlookEnabledCheckbox instanceof HTMLInputElement))
+    throw Error('Outlook enable checkbox is not an input')
+  outlookEnabledCheckbox.checked = outlookEnabled
+
   // Consent Button
   const showConsentBtn = document.getElementById('status-consent-btn')
   if (!(showConsentBtn instanceof HTMLButtonElement))
@@ -59,10 +68,12 @@ async function renderStatus() {
   if (!consentStatus.required || consentStatus.consent) {
     enabledCheckbox.removeAttribute('disabled')
     gmailEnabledCheckbox.removeAttribute('disabled')
+    outlookEnabledCheckbox.removeAttribute('disabled')
     showConsentBtn.style.setProperty('display', 'none')
   } else {
     enabledCheckbox.setAttribute('disabled', '')
     gmailEnabledCheckbox.setAttribute('disabled', '')
+    outlookEnabledCheckbox.setAttribute('disabled', '')
     showConsentBtn.style.setProperty('display', 'inline-block')
   }
 
@@ -104,28 +115,44 @@ async function renderStatus() {
 function domListeners() {
   const enabledCheckbox = document.getElementById('status-enabled-checkbox')
   const gmailEnabledCheckbox = document.getElementById('status-gmail-enabled-checkbox')
+  const outlookEnabledCheckbox = document.getElementById('status-outlook-enabled-checkbox')
 
   if (!(enabledCheckbox instanceof HTMLInputElement))
     throw Error('Enable checkbox is not an input')
   if (!(gmailEnabledCheckbox instanceof HTMLInputElement))
     throw Error('Gmail enable checkbox is not an input')
+  if (!(outlookEnabledCheckbox instanceof HTMLInputElement))
+    throw Error('Outlook enable checkbox is not an input')
 
   enabledCheckbox.addEventListener('change', async () => {
     const enabled = enabledCheckbox.checked
     setEnabled(enabled)
-    if (!enabled && gmailEnabledCheckbox.checked) {
-      gmailEnabledCheckbox.checked = false
-      setGmailEnabled(false)
+    if (!enabled) {
+      if (gmailEnabledCheckbox.checked) {
+        gmailEnabledCheckbox.checked = false
+        setGmailEnabled(false)
+      }
+      if (outlookEnabledCheckbox.checked) {
+        outlookEnabledCheckbox.checked = false
+        setOutlookEnabled(false)
+      }
     }
   })
 
-  gmailEnabledCheckbox.addEventListener('change', async () => {
-    const gmailEnabled = gmailEnabledCheckbox.checked
-    setGmailEnabled(gmailEnabled)
-    if (gmailEnabled && !enabledCheckbox.checked) {
+  function enable(providerEnabled: boolean, setProviderEnabled: (enabled: boolean) => void, enabledCheckbox: any) {
+    setProviderEnabled(providerEnabled);
+    if (providerEnabled && !enabledCheckbox.checked) {
       enabledCheckbox.checked = true
       setEnabled(true)
     }
+  }
+
+  gmailEnabledCheckbox.addEventListener('change', async () => {
+    enable(gmailEnabledCheckbox.checked, setGmailEnabled, enabledCheckbox);
+  })
+
+  outlookEnabledCheckbox.addEventListener('change', async () => {
+    enable(outlookEnabledCheckbox.checked, setOutlookEnabled, enabledCheckbox);
   })
 
   const consentButton = document.getElementById('status-consent-btn')!

@@ -6,7 +6,7 @@ import {
   tabActivatedListener,
   tabUpdatedListener,
   setupFocusMessageListener,
-  setupGmailCheck,
+  setupMailCheck,
 } from './heartbeat'
 import { getClient, detectHostname, loadApiKey } from './client'
 import {
@@ -16,6 +16,7 @@ import {
   setConsentStatus,
   setEnabled,
   setGmailEnabled,
+  setOutlookEnabled,
   setHostname,
   waitForEnabled,
 } from '../storage'
@@ -54,6 +55,7 @@ browser.runtime.onInstalled.addListener(async () => {
     console.debug('Enabling the extension')
     await setEnabled(true)
     await setGmailEnabled(true)
+    await setOutlookEnabled(true)
   } else {
     console.info('Consent is required...opening consent tab')
     await setConsentStatus({ consent, required: true })
@@ -72,7 +74,7 @@ browser.alarms.create(config.heartbeat.alarmName, {
   periodInMinutes: Math.floor(config.heartbeat.intervalInSeconds / 60),
 })
 setupFocusMessageListener(client)
-clientReady.then(() => setupGmailCheck(client))
+clientReady.then(() => setupMailCheck(client))
 
 browser.alarms.onAlarm.addListener(async (alarm) => {
   await clientReady
